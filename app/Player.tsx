@@ -1,15 +1,51 @@
 "use client";
 
-import Image from "next/image";
-import { ChangeEvent, DragEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, ChangeEvent, DragEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type Track = {
   id: string;
   title: string;
   artist: string;
-  file: File;
   url: string;
+  size: number;
+  lastModified: number;
+  filePath?: string;
 };
+
+type DesktopFileDescriptor = {
+  name: string;
+  url: string;
+  size: number;
+  lastModified: number;
+  filePath?: string;
+};
+
+type PersistedTrack = Pick<Track, "id" | "title" | "artist" | "size" | "lastModified"> & {
+  filePath: string;
+};
+
+type SavedLibrary = {
+  tracks: Track[];
+  currentTrackId: string | null;
+  missingCount: number;
+};
+
+type InkTuneDesktopApi = {
+  chooseAudioFiles: () => Promise<DesktopFileDescriptor[]>;
+  describeDroppedFile: (file: File) => Promise<DesktopFileDescriptor | null>;
+  loadLibrary: () => Promise<SavedLibrary>;
+  saveLibrary: (memory: { tracks: PersistedTrack[]; currentTrackId: string | null }) => Promise<boolean>;
+  toggleAlwaysOnTop: () => Promise<boolean>;
+  minimize: () => void;
+  toggleMaximize: () => void;
+  close: () => void;
+};
+
+declare global {
+  interface Window {
+    inkTuneDesktop?: InkTuneDesktopApi;
+  }
+}
 
 const BAR_COUNT = 17;
 
@@ -20,8 +56,8 @@ function formatTime(value: number) {
   return `${minutes}:${seconds}`;
 }
 
-function trackDetails(file: File) {
-  const base = file.name.replace(/\.[^.]+$/, "").trim();
+function trackDetails(fileName: string) {
+  const base = fileName.replace(/\.[^.]+$/, "").trim();
   const chunks = base.split(/\s+-\s+/);
   if (chunks.length > 1) {
     return { artist: chunks[0], title: chunks.slice(1).join(" - ") };
@@ -42,6 +78,9 @@ export default function Player() {
   const [dragActive, setDragActive] = useState(false);
   const [liked, setLiked] = useState<Set<string>>(new Set());
   const [notice, setNotice] = useState("选一首本地音乐，让纸上的线条跳起来");
+  const [isDesktop, setIsDesktop] = useState(false);
+  const [uiScale, setUiScale] = useState(1);
+  const [alwaysOnTop, setAlwaysOnTop] = useState(false);
 
   const audioRef = useRef<HTMLAudioElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -53,14 +92,103 @@ export default function Player() {
   const frequencyRef = useRef<Uint8Array<ArrayBuffer> | null>(null);
   const objectUrlsRef = useRef<Set<string>>(new Set());
   const autoplayNextRef = useRef(false);
+  const libraryReadyRef = useRef(false);
 
   const currentTrack = tracks[currentIndex] ?? null;
   const hasTrack = Boolean(currentTrack);
 
-  const title = currentTrack?.title ?? "桃色余韵";
-  const artist = currentTrack?.artist ?? "Orange Daydreams";
+  const title = currentTrack?.title ?? "轻重力";
+  const artist = currentTrack?.artist ?? "Angelina · Rhodes Island";
 
-  const addFiles = useCallback((fileList: FileList | File[]) => {
+  useEffect(() => {
+    if (!window.inkTuneDesktop) return;
+
+    const updateScale = () => {
+      const widthScale = (window.innerWidth - 24) / 476;
+      const heightScale = (window.innerHeight - 24) / 830;
+      setUiScale(Math.max(0.62, Math.min(1.38, widthScale, heightScale)));
+    };
+
+    const firstFrame = window.requestAnimationFrame(() => {
+      setIsDesktop(true);
+      updateScale();
+    });
+    window.addEventListener("resize", updateScale);
+    return () => {
+      window.cancelAnimationFrame(firstFrame);
+      window.removeEventListener("resize", updateScale);
+    };
+  }, []);
+
+  useEffect(() => {
+    const desktopApi = window.inkTuneDesktop;
+    if (!desktopApi) return;
+
+    let cancelled = false;
+    void desktopApi.loadLibrary().then((memory) => {
+      if (cancelled) return;
+      libraryReadyRef.current = true;
+      setTracks(memory.tracks);
+      const restoredIndex = memory.currentTrackId
+        ? memory.tracks.findIndex((track) => track.id === memory.currentTrackId)
+        : 0;
+      setCurrentIndex(restoredIndex >= 0 ? restoredIndex : 0);
+
+      if (memory.tracks.length > 0) {
+        const missingHint = memory.missingCount > 0 ? `，另有 ${memory.missingCount} 首文件已移动或删除` : "";
+        setNotice(`已恢复 ${memory.tracks.length} 首本地音乐${missingHint}`);
+      } else if (memory.missingCount > 0) {
+        setNotice(`之前的 ${memory.missingCount} 首音乐已移动或删除，请重新选择`);
+      }
+    }).catch(() => {
+      if (cancelled) return;
+      libraryReadyRef.current = true;
+      setNotice("曲库记忆读取失败，本次仍可正常添加音乐");
+    });
+
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    const desktopApi = window.inkTuneDesktop;
+    if (!desktopApi || !libraryReadyRef.current) return;
+
+    const persistentTracks: PersistedTrack[] = tracks.flatMap((track) => track.filePath ? [{
+      id: track.id,
+      title: track.title,
+      artist: track.artist,
+      filePath: track.filePath,
+      size: track.size,
+      lastModified: track.lastModified,
+    }] : []);
+    const currentTrackId = tracks[currentIndex]?.id ?? null;
+
+    void desktopApi.saveLibrary({ tracks: persistentTracks, currentTrackId }).catch(() => {
+      setNotice("曲库记忆保存失败，请检查应用数据目录权限");
+    });
+  }, [currentIndex, tracks]);
+
+  const appendSources = useCallback((sources: DesktopFileDescriptor[]) => {
+    if (!sources.length) {
+      setNotice("没有识别到可读取的音频文件");
+      return;
+    }
+
+    const incoming: Track[] = sources.map((source) => ({
+      id: `${source.name}-${source.size}-${source.lastModified}-${crypto.randomUUID()}`,
+      url: source.url,
+      size: source.size,
+      lastModified: source.lastModified,
+      filePath: source.filePath,
+      ...trackDetails(source.name),
+    }));
+
+    setTracks((previous) => [...previous, ...incoming]);
+    setNotice(`已收进 ${incoming.length} 首音乐，关闭后也会记住`);
+    setLibraryOpen(true);
+  }, []);
+
+  const addFiles = useCallback(async (fileList: FileList | File[]) => {
     const files = Array.from(fileList).filter((file) =>
       file.type.startsWith("audio/") || /\.(mp3|wav|flac|m4a|aac|ogg|opus)$/i.test(file.name),
     );
@@ -70,19 +198,40 @@ export default function Player() {
       return;
     }
 
-    const incoming = files.map((file) => {
+    const desktopApi = window.inkTuneDesktop;
+    if (desktopApi) {
+      try {
+        const descriptors = (await Promise.all(files.map((file) => desktopApi.describeDroppedFile(file))))
+          .filter((item): item is DesktopFileDescriptor => Boolean(item));
+        appendSources(descriptors);
+      } catch {
+        setNotice("无法读取拖入文件的本地路径，请改用选择本地音乐按钮");
+      }
+      return;
+    }
+
+    const descriptors = files.map((file) => {
       const url = URL.createObjectURL(file);
       objectUrlsRef.current.add(url);
-      return { id: `${file.name}-${file.size}-${file.lastModified}-${crypto.randomUUID()}`, file, url, ...trackDetails(file) };
+      return { name: file.name, url, size: file.size, lastModified: file.lastModified };
     });
+    appendSources(descriptors);
+  }, [appendSources]);
 
-    setTracks((previous) => {
-      if (previous.length === 0) setCurrentIndex(0);
-      return [...previous, ...incoming];
-    });
-    setNotice(`已收进 ${incoming.length} 首音乐`);
-    setLibraryOpen(true);
-  }, []);
+  const chooseLocalMusic = useCallback(async () => {
+    const desktopApi = window.inkTuneDesktop;
+    if (!desktopApi) {
+      fileInputRef.current?.click();
+      return;
+    }
+
+    try {
+      const descriptors = await desktopApi.chooseAudioFiles();
+      if (descriptors.length) appendSources(descriptors);
+    } catch {
+      setNotice("打开本地文件选择器失败，请重新尝试");
+    }
+  }, [appendSources]);
 
   useEffect(() => {
     const objectUrls = objectUrlsRef.current;
@@ -119,7 +268,7 @@ export default function Player() {
   const startPlaying = useCallback(async () => {
     const audio = audioRef.current;
     if (!audio || !currentTrack) {
-      fileInputRef.current?.click();
+      void chooseLocalMusic();
       return;
     }
 
@@ -130,17 +279,17 @@ export default function Player() {
     } catch {
       setNotice("这个文件暂时无法播放");
     }
-  }, [currentTrack, ensureAudioGraph]);
+  }, [chooseLocalMusic, currentTrack, ensureAudioGraph]);
 
   const togglePlay = useCallback(() => {
     const audio = audioRef.current;
     if (!audio || !currentTrack) {
-      fileInputRef.current?.click();
+      void chooseLocalMusic();
       return;
     }
     if (audio.paused) void startPlaying();
     else audio.pause();
-  }, [currentTrack, startPlaying]);
+  }, [chooseLocalMusic, currentTrack, startPlaying]);
 
   const changeTrack = useCallback((nextIndex: number, autoplay = true) => {
     if (!tracks.length) return;
@@ -198,9 +347,16 @@ export default function Player() {
         }
       }
 
-      const beat = playing ? 1 + (bass / 255) * 0.022 : 1;
-      const glow = playing ? 0.08 + (bass / 255) * 0.34 : 0.08;
+      const energy = bass / 255;
+      const beat = playing ? 1 + energy * 0.09 : 1;
+      const rhythmEnergy = Math.max(0, Math.min(1, (energy - 0.1) / 0.9));
+      const swayResponse = Math.pow(rhythmEnergy, 1.55);
+      const sway = playing ? Math.sin(performance.now() / 175) * swayResponse * 9 : 0;
+      const lift = playing ? -energy * 5.5 : 0;
+      const glow = playing ? 0.08 + energy * 0.48 : 0.08;
       playerRef.current?.style.setProperty("--beat", beat.toFixed(4));
+      playerRef.current?.style.setProperty("--sway", sway.toFixed(3) + "deg");
+      playerRef.current?.style.setProperty("--lift", lift.toFixed(3) + "px");
       playerRef.current?.style.setProperty("--glow", glow.toFixed(3));
       animationFrame = requestAnimationFrame(tick);
     };
@@ -221,6 +377,15 @@ export default function Player() {
       setNotice("这本小曲册已经听完了");
     }
   }, [changeTrack, currentIndex, loopMode, startPlaying, tracks.length]);
+
+  const toggleAlwaysOnTop = useCallback(async () => {
+    try {
+      const next = await window.inkTuneDesktop?.toggleAlwaysOnTop();
+      if (typeof next === "boolean") setAlwaysOnTop(next);
+    } catch {
+      setNotice("置顶设置失败，请重新打开播放器再试");
+    }
+  }, []);
 
   const toggleLiked = () => {
     if (!currentTrack) return;
@@ -256,24 +421,50 @@ export default function Player() {
   const onDrop = (event: DragEvent<HTMLElement>) => {
     event.preventDefault();
     setDragActive(false);
-    addFiles(event.dataTransfer.files);
+    void addFiles(event.dataTransfer.files);
   };
 
   return (
     <main
-      className={`page-shell ${dragActive ? "is-dragging" : ""}`}
+      className={[
+        "page-shell",
+        dragActive ? "is-dragging" : "",
+        isDesktop ? "desktop-shell" : "",
+      ].filter(Boolean).join(" ")}
+      style={{ "--ui-scale": uiScale } as CSSProperties}
       onDragEnter={(event) => { event.preventDefault(); setDragActive(true); }}
       onDragOver={(event) => event.preventDefault()}
       onDragLeave={(event) => { if (event.currentTarget === event.target) setDragActive(false); }}
       onDrop={onDrop}
     >
-      <section ref={playerRef} className="player-card" aria-label="手绘音乐播放器">
-        <header className="topbar">
+      <div
+        className="player-stage"
+        style={isDesktop ? { width: 476 * uiScale, height: 830 * uiScale } : undefined}
+      >
+        <section ref={playerRef} className="player-card" aria-label="手绘音乐播放器">
+        <header className={isDesktop ? "topbar window-drag-region" : "topbar"}>
           <div>
             <p className="eyebrow">NOW SPINNING</p>
             <h1>InkTune<span className="title-dot">·</span></h1>
           </div>
-          <div className="top-actions">
+          <div className="top-actions window-no-drag">
+            {isDesktop && (
+              <div className="window-controls" aria-label="窗口控制">
+                <button
+                  type="button"
+                  className={`window-pin ${alwaysOnTop ? "active" : ""}`}
+                  onClick={() => void toggleAlwaysOnTop()}
+                  aria-label={alwaysOnTop ? "取消保持置顶" : "保持窗口置顶"}
+                  aria-pressed={alwaysOnTop}
+                  title={alwaysOnTop ? "取消置顶" : "保持置顶"}
+                >
+                  ⇧
+                </button>
+                <button type="button" onClick={() => window.inkTuneDesktop?.minimize()} aria-label="最小化窗口" title="最小化">—</button>
+                <button type="button" className="window-maximize" onClick={() => window.inkTuneDesktop?.toggleMaximize()} aria-label="最大化或还原窗口" title="最大化或还原">□</button>
+                <button type="button" className="window-close" onClick={() => window.inkTuneDesktop?.close()} aria-label="关闭窗口" title="关闭">×</button>
+              </div>
+            )}
             <label className="volume-control" title="音量">
               <button type="button" className="sound-button" onClick={() => setMuted((value) => !value)} aria-label={muted ? "打开声音" : "静音"}>
                 {muted || volume === 0 ? "♩" : "♫"}
@@ -288,7 +479,9 @@ export default function Player() {
 
         <div className="cover-wrap">
           <div className="cover-pulse">
-            <Image src="/fox-album.png" alt="戴着耳机的狐耳少女手绘封面" width={1024} height={1024} priority />
+            {/* The same relative asset path works in both the website preview and packaged desktop app. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="./angelina-album.png" alt="明日方舟安洁莉娜手绘封面" draggable={false} />
           </div>
           <span className="cover-tape tape-one" />
           <span className="cover-tape tape-two" />
@@ -323,7 +516,7 @@ export default function Player() {
             step="0.01"
             value={Math.min(currentTime, duration || 0)}
             disabled={!hasTrack}
-            style={{ "--progress": duration ? `${(currentTime / duration) * 100}%` : "0%" } as React.CSSProperties}
+            style={{ "--progress": duration ? `${(currentTime / duration) * 100}%` : "0%" } as CSSProperties}
             onChange={(event) => {
               const value = Number(event.target.value);
               if (audioRef.current) audioRef.current.currentTime = value;
@@ -349,8 +542,8 @@ export default function Player() {
           <button type="button" className={`sketch-button small-control queue-button ${libraryOpen ? "active" : ""}`} onClick={() => setLibraryOpen((value) => !value)} aria-label="播放列表">≡</button>
         </div>
 
-        <button type="button" className="local-pill" onClick={() => fileInputRef.current?.click()}>+ 选择本地音乐</button>
-        <input ref={fileInputRef} className="file-input" type="file" accept="audio/*,.flac,.m4a,.aac,.ogg,.opus" multiple onChange={(event: ChangeEvent<HTMLInputElement>) => { if (event.target.files) addFiles(event.target.files); event.target.value = ""; }} />
+        <button type="button" className="local-pill" onClick={() => void chooseLocalMusic()}>+ 选择本地音乐</button>
+        <input ref={fileInputRef} className="file-input" type="file" accept="audio/*,.flac,.m4a,.aac,.ogg,.opus" multiple onChange={(event: ChangeEvent<HTMLInputElement>) => { if (event.target.files) void addFiles(event.target.files); event.target.value = ""; }} />
         <p className="hint">{notice}</p>
 
         <aside className={`library-drawer ${libraryOpen ? "open" : ""}`} aria-hidden={!libraryOpen}>
@@ -368,12 +561,12 @@ export default function Player() {
                 <button type="button" key={track.id} className={index === currentIndex ? "current" : ""} onClick={() => { changeTrack(index); setLibraryOpen(false); }}>
                   <span className="track-number">{index === currentIndex && playing ? "♫" : String(index + 1).padStart(2, "0")}</span>
                   <span className="track-meta"><strong>{track.title}</strong><small>{track.artist}</small></span>
-                  <span className="track-size">{(track.file.size / 1024 / 1024).toFixed(1)} MB</span>
+                  <span className="track-size">{(track.size / 1024 / 1024).toFixed(1)} MB</span>
                 </button>
               ))}
             </div>
           ) : (
-            <button type="button" className="empty-library" onClick={() => fileInputRef.current?.click()}>
+            <button type="button" className="empty-library" onClick={() => void chooseLocalMusic()}>
               <span>♫</span>
               把音乐拖到这里
               <small>或点击选择文件</small>
@@ -392,9 +585,10 @@ export default function Player() {
           onLoadedMetadata={(event) => setDuration(event.currentTarget.duration)}
           onDurationChange={(event) => setDuration(Number.isFinite(event.currentTarget.duration) ? event.currentTarget.duration : 0)}
           onEnded={onEnded}
-          onError={() => currentTrack && setNotice("音频加载失败，可以换个格式试试")}
+          onError={() => currentTrack && setNotice("音频加载失败，文件可能已被移动、删除或格式不受支持")}
         />
-      </section>
+        </section>
+      </div>
 
       <div className="drop-curtain" aria-hidden="true">
         <span>♫</span>

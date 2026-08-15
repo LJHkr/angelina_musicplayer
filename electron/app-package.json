@@ -1,0 +1,7 @@
+{
+  "name": "inktune-desktop",
+  "productName": "InkTune",
+  "version": "1.0.0",
+  "description": "Hand-drawn local music player for Windows",
+  "main": "electron/main.cjs"
+}

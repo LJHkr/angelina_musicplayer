@@ -38,3 +38,9 @@ yarn-error.log*
 /.wrangler/
 /outputs/
 /work/
+
+# desktop and IDE generated files
+/.vs/
+/desktop-dist/
+/release/
+/.packaging-stale/

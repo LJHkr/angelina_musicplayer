@@ -24,7 +24,7 @@ test("server-renders the InkTune player", async () => {
   assert.match(html, /NOW SPINNING/);
   assert.match(html, /选择本地音乐/);
   assert.match(html, /实时音频可视化/);
-  assert.match(html, /fox-album\.png/);
+  assert.match(html, /angelina-album\.png/);
   assert.doesNotMatch(html, /codex-preview|SkeletonPreview|react-loading-skeleton/);
 });
 

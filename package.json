@@ -1,6 +1,6 @@
 {
   "name": "inkwave-player",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "engines": {
     "node": ">=22.13.0"
@@ -10,8 +10,10 @@
     "build": "vinext build",
     "start": "vinext start",
     "test": "npm run build && node --test tests/rendered-html.test.mjs",
-    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
-    "db:generate": "drizzle-kit generate"
+    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern desktop-dist --ignore-pattern release --ignore-pattern .packaging-stale",
+    "db:generate": "drizzle-kit generate",
+    "desktop:build": "vite build --config desktop/vite.config.ts",
+    "desktop:package": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-windows.ps1"
   },
   "dependencies": {
     "drizzle-orm": "0.45.2",
@@ -43,5 +45,6 @@
     "vite": "8.0.13",
     "wrangler": "4.92.0"
   },
-  "type": "module"
+  "type": "module",
+  "main": "electron/main.cjs"
 }
