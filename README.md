@@ -6,7 +6,7 @@
 ![Platform](https://img.shields.io/badge/platform-Windows%20x64-f47a49?style=flat-square)
 ![Privacy](https://img.shields.io/badge/audio-local%20only-4f3d38?style=flat-square)
 
-InkTune 可以直接作为 Windows 桌面软件运行。选择或拖入本地音乐后，播放器会显示实时频谱，让安洁莉娜主题封面随低频节奏呼吸、弹跳和左右摇摆。音频只在本机读取与分析，不会上传。
+Angelina's Music Player 可以直接作为 Windows 桌面软件运行。选择或拖入本地音乐后，播放器会显示实时频谱，让安洁莉娜主题封面随低频节奏呼吸、弹跳和左右摇摆。音频只在本机读取与分析，不会上传。
 
 ## 下载
 
