@@ -32,6 +32,7 @@ Angelina's Music Player 可以直接作为 Windows 桌面软件运行。选择�
 - 无边框窗口、内部窗口按钮、窗口置顶与空白区域拖动
 - 调整窗口大小时整体等比例缩放，不显示页面滚动条
 - 禁止界面文字和图片被误选中或拖出
+<img width="795" height="1409" alt="image" src="https://github.com/user-attachments/assets/d67bf180-829b-4c62-8bcc-edadd553730f" />
 
 ## 曲库记忆
 
