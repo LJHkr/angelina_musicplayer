@@ -2,13 +2,12 @@
 
 > 一款带有手绘纸张质感、节拍动画与实时音频可视化的安洁莉娜主题 Windows 本地音乐播放器。
 灵感来源：B站up主 拉格朗日海鸥【【明日方舟】夏日播放器！！！】 https://www.bilibili.com/video/BV1kBgA6gEC5/?share_source=copy_web&vd_source=103b77a831b2649eadb39bcbbd28e8a2
-> 可以搭配视频转音频：https://github.com/LJHkr/video2audio/releases/tag/v1.0.0
 
 [![Release](https://img.shields.io/github/v/release/LJHkr/inkwave-player?display_name=tag&style=flat-square)](https://github.com/LJHkr/inkwave-player/releases/latest)
 ![Platform](https://img.shields.io/badge/platform-Windows%20x64-f47a49?style=flat-square)
 ![Privacy](https://img.shields.io/badge/audio-local%20only-4f3d38?style=flat-square)
 
-Angelina's Music Player 可以直接作为 Windows 桌面软件运行。选择或拖入本地音乐后，播放器会显示实时频谱，让安洁莉娜主题封面随低频节奏呼吸、弹跳和左右摇摆。音频只在本机读取与分析，不会上传。
+Angelina's Music Player 可以直接作为 Windows 桌面软件运行。选择或拖入本地音乐后，播放器会显示实时频谱，让安洁莉娜主题封面随低频节奏呼吸、弹跳和左右摇摆。音频只在本机读取与分析，不会上传。可以搭配视频转音频：https://github.com/LJHkr/video2audio/releases/tag/v1.0.0
 
 ## 下载
 
