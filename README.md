@@ -1,4 +1,4 @@
-# InkTune
+# Angelina's Music Player
 
 > 一款带有手绘纸张质感、节拍动画与实时音频可视化的 Windows 本地音乐播放器。
 
