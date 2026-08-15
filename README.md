@@ -1,6 +1,7 @@
 # Angelina's Music Player
 
-> 一款带有手绘纸张质感、节拍动画与实时音频可视化的 Windows 本地音乐播放器。
+> 一款带有手绘纸张质感、节拍动画与实时音频可视化的安洁莉娜主题 Windows 本地音乐播放器。
+灵感来源：B站up主 拉格朗日海鸥【【明日方舟】夏日播放器！！！】 https://www.bilibili.com/video/BV1kBgA6gEC5/?share_source=copy_web&vd_source=103b77a831b2649eadb39bcbbd28e8a2
 
 [![Release](https://img.shields.io/github/v/release/LJHkr/inkwave-player?display_name=tag&style=flat-square)](https://github.com/LJHkr/inkwave-player/releases/latest)
 ![Platform](https://img.shields.io/badge/platform-Windows%20x64-f47a49?style=flat-square)
